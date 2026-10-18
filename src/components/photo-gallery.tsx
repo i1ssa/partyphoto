@@ -5,15 +5,16 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { PhotoDTO } from "@/lib/photo-types";
 import { PhotoUpload } from "@/components/photo-upload";
 import { AlbumZip } from "@/components/album-zip";
+import { PhotoViewer } from "@/components/photo-viewer";
 
-type PhotoGalleryProps = { maxUploadMb: number; allowDownloads?: boolean } & (
+type PhotoGalleryProps = { maxUploadMb: number; maxPixels: number; allowDownloads?: boolean } & (
   | { eventId: string; slug?: never; allowUploads?: boolean }
   | { eventId?: never; slug: string; allowUploads: boolean }
 );
 type PhotoPage = { photos: PhotoDTO[]; nextCursor: string | null; totalCount?: number; error?: string };
 const statusLabels: Record<string, string> = { PENDING: "Не опубликовано", PUBLISHED: "Опубликовано", HIDDEN: "Скрыто", DELETING: "Удаляется", UPLOADING: "Обрабатывается", PROCESSING: "Обрабатывается", FAILED: "Ошибка обработки" };
 
-export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownloads = true, maxUploadMb }: PhotoGalleryProps) {
+export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownloads = true, maxUploadMb, maxPixels }: PhotoGalleryProps) {
   const router = useRouter();
   const sectionId = useId();
   const staff = Boolean(eventId);
@@ -29,17 +30,18 @@ export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownload
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moderating, setModerating] = useState(false);
   const [moderationMessage, setModerationMessage] = useState("");
-  const [preview, setPreview] = useState<PhotoDTO | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [likePending, setLikePending] = useState<Set<string>>(new Set());
   const [likeErrors, setLikeErrors] = useState<Record<string, string>>({});
-  const previewDialog = useRef<HTMLDialogElement>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const generation = useRef(0);
   const moreController = useRef<AbortController | null>(null);
   const mutationPending = useRef(false);
   const likesInFlight = useRef(new Set<string>());
+  const refreshSortedLikes = useRef(false);
+  const previewOpen = useRef(false);
 
   const fetchPhotos = useCallback(async (cursor: string | null, signal?: AbortSignal) => {
     const query = new URLSearchParams();
@@ -55,6 +57,10 @@ export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownload
     const controller = new AbortController();
     generation.current++;
     moreController.current?.abort();
+    moreController.current = null;
+    previewOpen.current = false;
+    refreshSortedLikes.current = false;
+    setPreviewId(null);
     setLoading(true); setLoadingMore(false); setError(""); setPhotos([]); setNextCursor(null); setTotalCount(null); setSelected(new Set()); setFailedImages(new Set());
     fetchPhotos(null, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
@@ -72,32 +78,41 @@ export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownload
   }, [fetchPhotos, reloadKey, staff, slug]);
 
   useEffect(() => {
-    if (preview) previewDialog.current?.showModal();
-  }, [preview]);
-
-  useEffect(() => {
     if (deleteConfirm) deleteDialog.current?.showModal();
   }, [deleteConfirm]);
 
-  async function loadMore() {
-    if (!nextCursor || loadingMore || loading) return;
+  async function loadMore(): Promise<string | null> {
+    if (!nextCursor || loadingMore || loading || moreController.current) return null;
     const currentGeneration = generation.current;
     const controller = new AbortController();
     moreController.current = controller;
     setLoadingMore(true); setError("");
     try {
       const result = await fetchPhotos(nextCursor, controller.signal);
-      if (generation.current !== currentGeneration || controller.signal.aborted) return;
+      if (generation.current !== currentGeneration || controller.signal.aborted) return null;
+      const firstNewPhoto = result.photos.find(photo => !photos.some(current => current.id === photo.id));
       setPhotos((current) => {
         const existing = new Set(current.map((photo) => photo.id));
         return [...current, ...result.photos.filter((photo) => !existing.has(photo.id))];
       });
       setNextCursor(result.nextCursor);
       if (result.totalCount !== undefined) setTotalCount(result.totalCount);
+      return firstNewPhoto?.id ?? null;
     } catch (loadError) {
       if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить фотографии.");
+      return null;
     } finally {
+      if (moreController.current === controller) moreController.current = null;
       if (generation.current === currentGeneration) setLoadingMore(false);
+    }
+  }
+
+  function closePreview() {
+    previewOpen.current = false;
+    setPreviewId(null);
+    if (refreshSortedLikes.current) {
+      refreshSortedLikes.current = false;
+      setReloadKey(current => current + 1);
     }
   }
 
@@ -156,8 +171,12 @@ export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownload
       const liked = result.liked;
       const likeCount = result.likeCount;
       setPhotos((current) => current.map((entry) => entry.id === photo.id ? { ...entry, liked, likeCount } : entry));
-      setPreview((current) => current?.id === photo.id ? { ...current, liked, likeCount } : current);
-      if (sort === "likes") setReloadKey((current) => current + 1);
+      if (sort === "likes") {
+        // Keep the current album order while it is being viewed, then refresh
+        // the ranking on close instead of interrupting navigation or playback.
+        if (previewOpen.current) refreshSortedLikes.current = true;
+        else setReloadKey((current) => current + 1);
+      }
     } catch (likeError) {
       setLikeErrors((current) => ({ ...current, [photo.id]: likeError instanceof Error ? likeError.message : "Не удалось изменить лайк. Попробуйте ещё раз." }));
     } finally {
@@ -178,15 +197,17 @@ export function PhotoGallery({ eventId, slug, allowUploads = true, allowDownload
       <div className="gallery-heading"><div>{staff && <p className="eyebrow">УПРАВЛЕНИЕ ФОТОГРАФИЯМИ</p>}<h2 id={`${sectionId}-heading`}>{staff ? "Фотографии" : "Галерея"}</h2>{!staff && <p className="guest-gallery-description">Фотографии нашего события</p>}</div>{!staff && totalCount !== null && <span className="guest-photo-count">{totalCount.toLocaleString("ru-RU")} фото</span>}<button className={staff ? "button button-outline" : "guest-gallery-refresh"} type="button" onClick={() => {setReloadKey((current) => current + 1);router.refresh();}} disabled={loading || moderating} aria-label="Обновить">{staff ? "Обновить" : <span aria-hidden="true">↻</span>}</button></div>
       {!staff && <div className="gallery-sort" role="group" aria-label="Сортировка фотографий"><button type="button" aria-pressed={sort === "newest"} onClick={() => changeSort("newest")}>Новые</button><button type="button" aria-pressed={sort === "likes"} onClick={() => changeSort("likes")}><span aria-hidden="true">♡</span> По лайкам</button></div>}
       {staff && !loading && photos.length > 0 && <AlbumZip key={`${endpoint}:${reloadKey}`} endpoint={`/api/events/${eventId}/zip`} />}
-      {allowUploads && <PhotoUpload endpoint={endpoint} maxUploadMb={maxUploadMb} guest={!staff} compact={!staff} onUploaded={() => setReloadKey((current) => current + 1)} />}
+      {allowUploads && <PhotoUpload endpoint={endpoint} maxUploadMb={maxUploadMb} maxPixels={maxPixels} guest={!staff} compact={!staff} onUploaded={() => setReloadKey((current) => current + 1)} />}
       {staff && photos.length > 0 && <div className="gallery-moderation"><label className="checkbox-field"><input type="checkbox" checked={photos.length > 0 && photos.slice(0, 100).every((photo) => selected.has(photo.id))} onChange={(event) => {setSelected(event.target.checked ? new Set(photos.slice(0, 100).map((photo) => photo.id)) : new Set());setModerationMessage("");}} disabled={moderating || loading} /><span><strong>Выбрать все</strong><small>До 100 фотографий за раз.</small></span></label><p className="gallery-selection" role="status" aria-live="polite">Выбрано: {selected.size}</p><div className="moderation-actions"><button className="button button-outline" type="button" onClick={() => moderate("publish")} disabled={!selected.size || moderating || loading}>Опубликовать</button><button className="button button-outline" type="button" onClick={() => moderate("hide")} disabled={!selected.size || moderating || loading}>Скрыть</button><button className="button button-danger" type="button" onClick={() => setDeleteConfirm(true)} disabled={!selected.size || moderating || loading}>Удалить</button></div></div>}
       {moderationMessage && <p className="form-success" role="status">{moderationMessage}</p>}
       {error && <div className="gallery-error"><p className="form-error" role="alert">{error}</p>{!photos.length && !loading && <button className="text-link retry-button" type="button" onClick={() => setReloadKey((current) => current + 1)}>Попробовать ещё раз</button>}</div>}
       {!staff && photos.filter((photo) => likeErrors[photo.id]).map((photo) => <p key={photo.id} id={`${sectionId}-card-${photo.id}-likes-error`} className="form-error guest-like-error" role="alert">{photo.filename}: {likeErrors[photo.id]}</p>)}
-      {loading ? <p className="gallery-loading" role="status">Загружаем фотографии…</p> : photos.length ? <div className="photo-grid">{photos.map((photo) => <article className="photo-card" key={photo.id}><div className="photo-image-wrap"><button className="photo-preview-button" type="button" onClick={() => setPreview(photo)} aria-label={`Открыть фотографию ${photo.filename}`}>{failedImages.has(photo.id) ? <span className="photo-image-error">Превью недоступно</span> : <img src={photo.thumbnailUrl} width={photo.width} height={photo.height} loading="lazy" decoding="async" alt={photo.filename} onError={() => setFailedImages((current) => new Set(current).add(photo.id))} />}</button>{staff && <label className="photo-select"><input type="checkbox" checked={selected.has(photo.id)} onChange={() => toggleSelected(photo.id)} disabled={moderating} /><span className="sr-only">Выбрать фотографию {photo.filename}</span></label>}{staff && <span className={`photo-status photo-status-${photo.status.toLowerCase()}`}>{statusLabels[photo.status] || "Обрабатывается"}</span>}</div><div className="photo-caption"><span title={photo.filename}>{photo.filename}</span><div className="photo-card-actions">{likeControl(photo, "card")}{photo.downloadUrl && (staff || allowDownloads) && <a className="photo-download" href={photo.downloadUrl} download={photo.filename} aria-label={`Скачать оригинал ${photo.filename}`}><span aria-hidden="true">↓</span></a>}</div></div></article>)}</div> : !error && <div className="gallery-empty"><span aria-hidden="true">○</span><h3>Первые моменты ещё впереди</h3><p>{allowUploads ? "Добавьте фотографии — они появятся в этом альбоме." : "Организатор ещё не опубликовал фотографии. Загляните сюда чуть позже."}</p></div>}
+      {loading ? <p className="gallery-loading" role="status">Загружаем фотографии…</p> : photos.length ? <div className="photo-grid">{photos.map((photo) => <article className="photo-card" key={photo.id}><div className="photo-image-wrap"><button className="photo-preview-button" type="button" onClick={() => { previewOpen.current = true; setPreviewId(photo.id); }} aria-label={`Открыть фотографию ${photo.filename}`}>{failedImages.has(photo.id) ? <span className="photo-image-error">Превью недоступно</span> : <img src={photo.thumbnailUrl} width={photo.width} height={photo.height} loading="lazy" decoding="async" alt={photo.filename} onError={() => setFailedImages((current) => new Set(current).add(photo.id))} />}</button>{staff && <label className="photo-select"><input type="checkbox" checked={selected.has(photo.id)} onChange={() => toggleSelected(photo.id)} disabled={moderating} /><span className="sr-only">Выбрать фотографию {photo.filename}</span></label>}{staff && <span className={`photo-status photo-status-${photo.status.toLowerCase()}`}>{statusLabels[photo.status] || "Обрабатывается"}</span>}</div><div className="photo-caption"><span title={photo.filename}>{photo.filename}</span><div className="photo-card-actions">{likeControl(photo, "card")}{photo.downloadUrl && (staff || allowDownloads) && <a className="photo-download" href={photo.downloadUrl} download={photo.filename} aria-label={`Скачать оригинал ${photo.filename}`}><span aria-hidden="true">↓</span></a>}</div></div></article>)}</div> : !error && <div className="gallery-empty"><span aria-hidden="true">○</span><h3>Первые моменты ещё впереди</h3><p>{allowUploads ? "Добавьте фотографии — они появятся в этом альбоме." : "Организатор ещё не опубликовал фотографии. Загляните сюда чуть позже."}</p></div>}
       {!loading && nextCursor && <div className="gallery-load-more"><button className="button button-outline" type="button" onClick={loadMore} disabled={loadingMore || moderating}>{loadingMore ? "Загружаем…" : "Показать ещё"}</button></div>}
       {!staff && !loading && photos.length > 0 && allowDownloads && <AlbumZip key={`${endpoint}:${reloadKey}`} endpoint={`/api/albums/${slug}/zip`} compact />}
-      {preview && <dialog ref={previewDialog} className="photo-preview-dialog" aria-labelledby={`${sectionId}-preview-title`} onCancel={() => setPreview(null)} onClick={(event) => {if (event.target === event.currentTarget) setPreview(null);}}><div className="photo-preview-content"><div className="photo-preview-header"><h3 id={`${sectionId}-preview-title`}>{preview.filename}</h3><button className="dialog-close" type="button" onClick={() => setPreview(null)} aria-label="Закрыть просмотр фотографии">×</button></div><img src={preview.thumbnailUrl} width={preview.width} height={preview.height} alt={preview.filename} /><div className="photo-preview-footer"><span>Превью фотографии</span><div className="photo-preview-controls">{likeControl(preview, "preview")}{preview.downloadUrl && (staff || allowDownloads) && <a className="button button-primary" href={preview.downloadUrl} download={preview.filename}>Скачать оригинал <span aria-hidden="true">↓</span></a>}</div></div></div></dialog>}
+      {previewId && photos.some(photo => photo.id === previewId) && <PhotoViewer photos={photos} activeId={previewId} onSelect={setPreviewId} onClose={closePreview}
+        totalCount={totalCount ?? undefined} hasMore={Boolean(nextCursor)} onLoadMore={loadMore} loadingMore={loadingMore} loadError={error}
+        renderActions={photo => <>{likeControl(photo, "preview")}{photo.downloadUrl && (staff || allowDownloads) && <a className="button button-primary" href={photo.downloadUrl} download={photo.filename}>Скачать оригинал <span aria-hidden="true">↓</span></a>}</>} />}
       {deleteConfirm && <dialog ref={deleteDialog} className="confirm-dialog" aria-labelledby={`${sectionId}-delete-title`} aria-describedby={`${sectionId}-delete-description`} onCancel={(event) => {if (moderating) event.preventDefault();else setDeleteConfirm(false);}}><h3 id={`${sectionId}-delete-title`}>Удалить выбранные фотографии?</h3><p id={`${sectionId}-delete-description`}>Выбрано: {selected.size}. Фотографии исчезнут из альбома. Это действие нельзя отменить.</p><div className="confirm-actions"><button className="button button-outline" type="button" onClick={() => setDeleteConfirm(false)} disabled={moderating}>Отмена</button><button className="button button-danger" type="button" onClick={() => moderate("delete")} disabled={moderating}>{moderating ? "Удаляем…" : "Удалить фотографии"}</button></div></dialog>}
     </section>
   );

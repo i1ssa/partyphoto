@@ -15,6 +15,39 @@ statistics, password recovery through Brevo, and a light/dark theme switch.
 The default theme follows the device settings; a manual choice is saved
 in the browser and synchronized across tabs.
 
+### Try an album and browse photos
+
+The home page's **«Посмотреть пример»** link opens `/demo`: six bundled sample
+photos, local-only likes, and the same photo viewer used by real albums. It
+requires no account, database, S3, or seed command. Sample likes reset on reload;
+sample photos and their credits are in `public/demo-photos/`.
+
+Open a photo to browse with previous/next buttons, keyboard arrows, or a horizontal
+swipe. **«Слайд-шоу»** starts a four-second presentation; it never starts by itself.
+It loads the next gallery page when needed and stops at the last photo, when the
+tab is hidden, or when the viewer closes. Likes and permitted downloads remain
+available in the viewer.
+
+### Large phone photos
+
+The upload form shows both byte and megapixel limits. Oversized static JPEG, PNG,
+and WebP files offer **«Уменьшить фото»** (or a batch action). Preparation happens
+locally, only after that choice, and uploads a clearly marked `-small` copy.
+The original on the device is unchanged; files already within limits are uploaded
+unchanged. Clear the selection to cancel preparation. Unsupported formats such
+as HEIC, animated images, or files too large for safe browser processing require
+conversion/resizing on the device. The server continues validating every upload.
+
+Focused browser checks, with the local app and PostgreSQL running:
+
+```bash
+npm run test:ui -- tests/demo-album.browser.spec.ts tests/photo-viewer.browser.spec.ts tests/photo-preparation.browser.spec.ts
+```
+
+The demo tests need only the app; the viewer/preparation tests create their own
+temporary local database records and mock media responses. Existing media and
+camera tests additionally exercise local S3.
+
 The description below was checked against the code on **October 10, 2026**, application version `0.1.0`.
 
 ## Contents
