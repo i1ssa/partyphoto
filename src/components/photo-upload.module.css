@@ -1,0 +1,19 @@
+.status {
+  flex: 0 1 260px;
+  justify-content: flex-end;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  text-align: right;
+}
+.status button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.notice { flex-basis: 100%; line-height: 1.6; }
+.action { margin-right: 10px; }
+@media (max-width: 600px) {
+  .status { flex-basis: auto; justify-content: flex-start; text-align: left; }
+  .action { margin-right: 0; }
+}

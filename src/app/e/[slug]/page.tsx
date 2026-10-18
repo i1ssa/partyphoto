@@ -4,6 +4,7 @@ import { getGuestAlbum } from "@/lib/albums";
 import { AlbumAccess } from "@/components/album-access";
 import { EventDate } from "@/components/event-date";
 import { PhotoGallery } from "@/components/photo-gallery";
+import { imagePixelLimit } from "@/lib/runtime-limits";
 
 export const metadata = { title: "Альбом мероприятия — PartyPhoto", robots: { index: false, follow: false } };
 
@@ -18,6 +19,6 @@ export default async function AlbumPage({ params }: { params: Promise<{ slug: st
         {album.event?.startsAt && <p>Дата мероприятия: <EventDate value={album.event.startsAt}/></p>}
       </>}
     </section>
-    {!album.locked && album.event && <PhotoGallery slug={album.slug} maxUploadMb={album.event.maxUploadMb} allowUploads={album.event.allowGuestUploads} allowDownloads={album.event.allowDownloads} />}
+    {!album.locked && album.event && <PhotoGallery slug={album.slug} maxUploadMb={album.event.maxUploadMb} maxPixels={imagePixelLimit()} allowUploads={album.event.allowGuestUploads} allowDownloads={album.event.allowDownloads} />}
   </main>;
 }

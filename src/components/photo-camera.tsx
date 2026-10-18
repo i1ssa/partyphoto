@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 type PhotoCameraProps = {
   maxUploadMb: number;
+  maxPixels: number;
   onUpload: (file: File) => Promise<void>;
   onClose: () => void;
   onChooseFile: () => void;
@@ -26,7 +27,7 @@ function cameraError(error: unknown): string {
   return "Не удалось запустить камеру. Попробуйте ещё раз или выберите фото с устройства.";
 }
 
-export function PhotoCamera({ maxUploadMb, onUpload, onClose, onChooseFile }: PhotoCameraProps) {
+export function PhotoCamera({ maxUploadMb, maxPixels, onUpload, onClose, onChooseFile }: PhotoCameraProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -187,8 +188,8 @@ export function PhotoCamera({ maxUploadMb, onUpload, onClose, onChooseFile }: Ph
     const request = generation.current;
     const canvas = document.createElement("canvas");
     try {
-      // Preserve the whole frame while staying within the demo's 6 MP photo limit.
-      const scale = Math.min(1, 2560 / Math.max(preview.videoWidth, preview.videoHeight), Math.sqrt(6_000_000 / (preview.videoWidth * preview.videoHeight)));
+      // Preserve the whole frame within this deployment’s photo limit.
+      const scale = Math.min(1, 2560 / Math.max(preview.videoWidth, preview.videoHeight), Math.sqrt(maxPixels / (preview.videoWidth * preview.videoHeight)));
       canvas.width = Math.max(1, Math.floor(preview.videoWidth * scale));
       canvas.height = Math.max(1, Math.floor(preview.videoHeight * scale));
       const context = canvas.getContext("2d");

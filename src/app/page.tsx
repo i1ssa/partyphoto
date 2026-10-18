@@ -17,6 +17,7 @@ export default function Home() {
       <p className="home-intro">Соберите моменты вашего события<br className="home-intro-break" /> в одном альбоме. И поделитесь ими.</p>
       <div className="home-actions">
         <Link className="button button-primary" href="/join"><UiIcon name="album" />Открыть альбом по коду</Link>
+        <Link className="button button-outline" href="/demo"><UiIcon name="camera" />Посмотреть пример</Link>
         <Link className="button button-outline" href="/dashboard"><UiIcon name="user" />Мои мероприятия</Link>
         <Link className="home-create" href="/register"><UiIcon name="plus" />Создать своё событие</Link>
       </div>
