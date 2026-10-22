@@ -43,4 +43,3 @@ jobs:
 
       - name: Run demo runtime tests
         run: npm run test:demo
-
