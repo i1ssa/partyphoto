@@ -81,7 +81,7 @@ MAIL_FROM_NAME=PartyPhoto npm run dev
 npm run test:email
 npm run test:forgot-password
 npm run test:password-reset
-npm run test:ui -- tests/forgot-password.browser.spec.ts tests/password-reset.browser.spec.ts
+npm run test:ui -- frontend/tests/forgot-password.browser.spec.ts frontend/tests/password-reset.browser.spec.ts
 ```
 
 HTTP-тест сам поднимает mock-провайдер на `127.0.0.1:3119`. Тестовый endpoint

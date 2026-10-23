@@ -69,7 +69,7 @@
    следить за давностью записей и сообщением `View cleanup` в логах.
    Оригиналы и превью выдаёт приложение через свой API, публичный S3 endpoint
    для браузера не требуется. Bucket должен оставаться приватным.
-5. Заменить домен в `infra/nginx/partyphoto.conf`, установить файл в
+5. Заменить домен в `backend/infra/nginx/partyphoto.conf`, установить файл в
    `/etc/nginx/sites-available/partyphoto`, включить через `sites-enabled`.
    Для дистрибутивов без sites-enabled использовать `/etc/nginx/conf.d/`.
    Проверить `sudo nginx -t`, затем перезагрузить Nginx.
@@ -87,7 +87,7 @@
    назначить его первым суперадминистратором из checkout проекта на сервере:
 
    ```bash
-   docker compose -f compose.yaml -f compose.production.yaml run --rm --no-deps app node scripts/admin-bootstrap.mjs --email owner@example.com
+   docker compose -f compose.yaml -f compose.production.yaml run --rm --no-deps app node backend/scripts/admin-bootstrap.mjs --email owner@example.com
    ```
 
    CLI работает с production-БД и существующим активным аккаунтом; локальные
@@ -124,7 +124,7 @@
 На VPS без установленного Node.js можно запустить CLI из образа приложения:
 
 ```bash
-docker compose -f compose.yaml -f compose.production.yaml run --rm --no-deps app node scripts/reset-password.mjs --email owner@example.com
+docker compose -f compose.yaml -f compose.production.yaml run --rm --no-deps app node backend/scripts/reset-password.mjs --email owner@example.com
 ```
 
 Этот вариант выводит ссылку в терминал оператора. БД должна быть запущена и мигрирована;

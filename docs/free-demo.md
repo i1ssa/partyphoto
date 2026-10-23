@@ -89,7 +89,7 @@ Auto-deploy выключен, чтобы случайные изменения `
 Содержимое `.env` локального проекта не заменять. Выполнить:
 
 ```bash
-node --env-file=.env.demo scripts/admin-bootstrap.mjs --email owner@example.com
+node --env-file=.env.demo backend/scripts/admin-bootstrap.mjs --email owner@example.com
 ```
 
 Указать email своего уже зарегистрированного аккаунта. Пароль аккаунта команда

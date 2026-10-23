@@ -1,0 +1,12 @@
+import { authFailure, authResponse, readAuthJson } from "@backend/lib/auth-http";
+import { consumeRateLimit } from "@backend/lib/auth-rate-limit";
+import { staffPhotoAccess, moderatePhotos } from "@backend/lib/photos";
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const data = await readAuthJson(request);
+    const access = await staffPhotoAccess((await params).id);
+    await consumeRateLimit(`media:moderate:${access.event.id}`, 120, 900);
+    await moderatePhotos(data, access);
+    return authResponse({ ok: true });
+  } catch (error) { return authFailure(error); }
+}

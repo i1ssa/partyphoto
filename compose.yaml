@@ -26,7 +26,7 @@ services:
     ports: ["127.0.0.1:9000:9000"]
     volumes:
       - seaweed:/data
-      - ./infra/storage/entrypoint.sh:/etc/partyphoto/storage-entrypoint.sh:ro,Z
+      - ./backend/infra/storage/entrypoint.sh:/etc/partyphoto/storage-entrypoint.sh:ro,Z
   migrate:
     build:
       context: .
@@ -66,7 +66,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       S3_ENDPOINT: http://storage:9000
-    command: ["node", "scripts/media-worker.mjs"]
+    command: ["node", "backend/scripts/media-worker.mjs"]
     depends_on:
       db:
         condition: service_healthy

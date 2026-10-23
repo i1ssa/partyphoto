@@ -1,9 +1,10 @@
-node_modules
-.next
+**/node_modules
+**/.next
 .git
-.data
-.env
-.env.*
+**/.data
+**/.env
+**/.env.*
 !.env.example
-test-results
-playwright-report
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
